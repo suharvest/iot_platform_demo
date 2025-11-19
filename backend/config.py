@@ -20,7 +20,7 @@ class Config:
     MQTT_TOPIC_PREFIX = os.getenv("MQTT_TOPIC_PREFIX", "devices")
 
     # 数据库配置
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/spectrum.db")
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/devices.db")
 
     # API服务配置
     API_HOST = os.getenv("API_HOST", "0.0.0.0")

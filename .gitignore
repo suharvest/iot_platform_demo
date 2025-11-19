@@ -44,6 +44,9 @@ data/*.db-journal
 *.swo
 *~
 
+# node_modules
+frontend/node_modules
+
 # OS
 .DS_Store
 Thumbs.db
@@ -55,6 +58,7 @@ logs/
 # Process PID files
 *.pid
 .backend.pid
+.frontend.pid
 
 # Claude AI
 .claude/

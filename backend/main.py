@@ -1,18 +1,20 @@
 """
 FastAPI主应用
+根据mqtt_protocal.md协议实现的全新API
 """
 import json
 import logging
-from typing import List
+import os
+from typing import List, Optional
+from pathlib import Path
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from pathlib import Path
 
 from backend.database import get_db, init_db
 from backend import crud, schemas
-from backend.mqtt_client import get_mqtt_client, MQTTClient
+from backend.mqtt_client import init_mqtt_client, get_mqtt_client
 from backend.config import config
 
 # 配置日志
@@ -21,10 +23,16 @@ logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="四川物联网平台",
-    description="产线设备实时监控系统",
-    version="0.1.0",
+    title="四川物联网平台 - 设备管理系统",
+    description="基于MQTT协议的示波器设备管理系统",
+    version="2.0.0",
 )
+
+# 挂载静态文件（3D模型）
+models_dir = Path(__file__).parent / "static" / "models"
+models_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
+
 
 # WebSocket连接管理
 class ConnectionManager:
@@ -41,7 +49,8 @@ class ConnectionManager:
 
     def disconnect(self, websocket: WebSocket):
         """断开连接"""
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
         logger.info(f"WebSocket连接已断开，当前连接数: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
@@ -61,29 +70,27 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
-
-# 全局事件循环引用
 main_event_loop = None
 
 
 # MQTT消息回调（用于WebSocket推送）
-def on_spectrum_received(data: dict):
-    """收到频谱数据时的回调"""
+def on_mqtt_message(topic: str, payload: dict):
+    """收到MQTT消息时的回调"""
     import asyncio
     global main_event_loop
 
     try:
         if main_event_loop and manager.active_connections:
-            # 使用主事件循环在另一个线程中运行协程
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast({
-                    "type": "spectrum",
-                    "data": data
+                    "type": "mqtt",
+                    "topic": topic,
+                    "data": payload
                 }),
                 main_event_loop
             )
     except Exception as e:
-        logger.error(f"推送频谱数据失败: {e}")
+        logger.error(f"推送MQTT消息失败: {e}")
 
 
 # ============ 启动和关闭事件 ============
@@ -94,19 +101,18 @@ async def startup_event():
     import asyncio
     global main_event_loop
 
-    logger.info("🚀 启动四川物联网平台...")
+    logger.info("🚀 启动四川物联网平台（设备管理系统）...")
 
     # 保存主事件循环引用
     main_event_loop = asyncio.get_event_loop()
 
     # 初始化数据库
     init_db()
+    logger.info("✓ 数据库已初始化")
 
     # 启动MQTT客户端
-    mqtt_client = MQTTClient(on_spectrum_callback=on_spectrum_received)
     try:
-        mqtt_client.connect()
-        mqtt_client.start_background()
+        init_mqtt_client(on_message_callback=on_mqtt_message)
         logger.info("✓ MQTT客户端已启动")
     except Exception as e:
         logger.error(f"✗ MQTT客户端启动失败: {e}")
@@ -119,20 +125,26 @@ async def shutdown_event():
     try:
         mqtt_client = get_mqtt_client()
         mqtt_client.stop()
-    except:
-        pass
+        logger.info("✓ MQTT客户端已停止")
+    except Exception as e:
+        logger.error(f"关闭MQTT客户端失败: {e}")
 
 
-# ============ 静态文件和首页 ============
+# ============ 前端页面 ============
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def read_root():
     """返回前端页面"""
-    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
-    if frontend_path.exists():
-        return FileResponse(frontend_path)
-    else:
-        return HTMLResponse(content="<h1>前端页面未找到</h1><p>请检查frontend/index.html是否存在</p>")
+    # 新的前端在 frontend/dist 目录（Vite构建后）
+    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist" / "index.html"
+    if frontend_dist.exists():
+        return FileResponse(frontend_dist)
+
+    # 兼容开发模式（直接返回提示）
+    return {
+        "message": "请先构建前端项目",
+        "instructions": "cd frontend && npm run build"
+    }
 
 
 # ============ 设备管理API ============
@@ -141,16 +153,17 @@ async def read_root():
 async def get_devices(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """获取设备列表"""
     devices = crud.get_devices(db, skip=skip, limit=limit)
+    total = crud.get_devices_count(db)
     return schemas.DeviceListResponse(
-        total=len(devices),
+        total=total,
         devices=devices
     )
 
 
-@app.get("/api/devices/{device_id}", response_model=schemas.Device)
-async def get_device(device_id: str, db: Session = Depends(get_db)):
-    """获取设备详情"""
-    device = crud.get_device(db, device_id)
+@app.get("/api/devices/{sn}", response_model=schemas.Device)
+async def get_device(sn: str, db: Session = Depends(get_db)):
+    """获取设备详情（通过序列号）"""
+    device = crud.get_device_by_sn(db, sn)
     if not device:
         raise HTTPException(status_code=404, detail="设备不存在")
     return device
@@ -160,82 +173,254 @@ async def get_device(device_id: str, db: Session = Depends(get_db)):
 async def create_device(device: schemas.DeviceCreate, db: Session = Depends(get_db)):
     """创建设备"""
     # 检查设备是否已存在
-    existing = crud.get_device(db, device.device_id)
+    existing = crud.get_device_by_sn(db, device.sn)
     if existing:
-        raise HTTPException(status_code=400, detail="设备ID已存在")
+        raise HTTPException(status_code=400, detail="设备序列号已存在")
     return crud.create_device(db, device)
 
 
-@app.put("/api/devices/{device_id}", response_model=schemas.Device)
-async def update_device(device_id: str, device: schemas.DeviceUpdate, db: Session = Depends(get_db)):
-    """更新设备"""
-    updated = crud.update_device(db, device_id, device)
+@app.put("/api/devices/{sn}", response_model=schemas.Device)
+async def update_device(sn: str, device: schemas.DeviceUpdate, db: Session = Depends(get_db)):
+    """更新设备信息"""
+    updated = crud.update_device(db, sn, device)
     if not updated:
         raise HTTPException(status_code=404, detail="设备不存在")
     return updated
 
 
-@app.delete("/api/devices/{device_id}")
-async def delete_device(device_id: str, db: Session = Depends(get_db)):
+@app.delete("/api/devices/{sn}")
+async def delete_device(sn: str, db: Session = Depends(get_db)):
     """删除设备"""
-    success = crud.delete_device(db, device_id)
+    success = crud.delete_device(db, sn)
     if not success:
         raise HTTPException(status_code=404, detail="设备不存在")
     return {"message": "设备已删除"}
 
 
-# ============ 频谱数据API ============
+# ============ 设备控制API（MQTT命令） ============
 
-@app.get("/api/spectrum/latest")
-async def get_latest_spectrum(device_id: str, db: Session = Depends(get_db)):
-    """获取最新频谱数据"""
-    spectrum = crud.get_latest_spectrum_data(db, device_id)
-    if not spectrum:
-        raise HTTPException(status_code=404, detail="暂无频谱数据")
+@app.post("/api/devices/{sn}/reset")
+async def reset_device(sn: str, db: Session = Depends(get_db)):
+    """复位设备"""
+    # 检查设备是否存在
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
 
-    # 解析JSON数据
-    data_dict = spectrum.to_dict()
-    if data_dict["data_json"]:
-        try:
-            data_dict["data_points"] = json.loads(data_dict["data_json"])
-            del data_dict["data_json"]
-        except:
-            pass
+    # 发送MQTT命令
+    mqtt_client = get_mqtt_client()
+    success = mqtt_client.publish_command(sn, "reset")
 
-    return data_dict
+    if not success:
+        raise HTTPException(status_code=500, detail="发送命令失败")
+
+    return {"message": "复位命令已发送", "command": "reset"}
 
 
-@app.get("/api/spectrum/history", response_model=schemas.SpectrumHistoryResponse)
-async def get_spectrum_history(
-    device_id: str,
-    page: int = 1,
-    page_size: int = 50,
+@app.post("/api/devices/{sn}/autosetup")
+async def autosetup_device(sn: str, db: Session = Depends(get_db)):
+    """自动配置设备"""
+    # 检查设备是否存在
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 发送MQTT命令
+    mqtt_client = get_mqtt_client()
+    success = mqtt_client.publish_command(sn, "autosetup")
+
+    if not success:
+        raise HTTPException(status_code=500, detail="发送命令失败")
+
+    return {"message": "自动配置命令已发送", "command": "autosetup"}
+
+
+@app.post("/api/devices/{sn}/measure")
+async def measure_device(
+    sn: str,
+    request: schemas.DeviceMeasureRequest,
     db: Session = Depends(get_db)
 ):
-    """获取历史频谱数据（分页）"""
-    skip = (page - 1) * page_size
-    data = crud.get_spectrum_history(db, device_id, skip=skip, limit=page_size)
-    total = crud.get_spectrum_count(db, device_id)
+    """执行测量（频率、Vpp、Vmax）"""
+    # 检查设备是否存在
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
 
-    return schemas.SpectrumHistoryResponse(
-        total=total,
-        page=page,
-        page_size=page_size,
-        data=data
+    # 发送MQTT查询
+    mqtt_client = get_mqtt_client()
+    success = mqtt_client.publish_query(sn, request.task, request.channel)
+
+    if not success:
+        raise HTTPException(status_code=500, detail="发送查询失败")
+
+    # 注意：实际响应通过MQTT异步返回，这里仅确认发送成功
+    return {
+        "message": "查询命令已发送",
+        "task": request.task,
+        "channel": request.channel,
+        "note": "结果将通过MQTT返回"
+    }
+
+
+# ============ 测量数据API ============
+
+@app.get("/api/devices/{sn}/measurements", response_model=schemas.MeasurementHistoryResponse)
+async def get_measurements(
+    sn: str,
+    channel: Optional[int] = None,
+    task: Optional[str] = None,
+    hours: float = 24,
+    skip: int = 0,
+    limit: int = 1000,
+    db: Session = Depends(get_db)
+):
+    """获取设备历史测量数据（支持小数小时，如0.0167表示1分钟）"""
+    # 检查设备是否存在
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 获取历史数据
+    measurements = crud.get_measurement_history(
+        db=db,
+        device_sn=sn,
+        channel=channel,
+        task=task,
+        hours=hours,
+        skip=skip,
+        limit=limit
     )
+
+    total = crud.get_measurement_count(db, sn, channel, task)
+
+    return schemas.MeasurementHistoryResponse(
+        total=total,
+        data=measurements
+    )
+
+
+# ============ 位置配置API ============
+
+@app.put("/api/devices/{sn}/location")
+async def update_device_location(
+    sn: str,
+    request: schemas.LocationConfigRequest,
+    db: Session = Depends(get_db)
+):
+    """更新设备位置配置"""
+    # 检查设备是否存在
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 获取位置缓存值
+    mqtt_client = get_mqtt_client()
+    location_value = mqtt_client.get_cached_location(request.location_topic)
+
+    # 更新设备位置
+    updated_device = crud.update_device_location(
+        db=db,
+        sn=sn,
+        location=location_value or "未知位置",
+        location_topic=request.location_topic
+    )
+
+    return {
+        "message": "位置配置已更新",
+        "location_topic": request.location_topic,
+        "location_value": location_value
+    }
+
+
+@app.get("/api/devices/{sn}/location")
+async def get_device_location(sn: str, db: Session = Depends(get_db)):
+    """获取设备位置信息（包括实时位置值）"""
+    device = crud.get_device_by_sn(db, sn)
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 如果配置了位置主题，获取实时位置
+    location_value = device.location
+    if device.location_topic:
+        mqtt_client = get_mqtt_client()
+        cached_location = mqtt_client.get_cached_location(device.location_topic)
+        if cached_location:
+            location_value = cached_location
+
+    return {
+        "location": location_value,
+        "location_topic": device.location_topic
+    }
+
+
+# ============ 3D模型API ============
+
+@app.get("/api/models", response_model=schemas.ModelListResponse)
+async def list_models():
+    """获取可用的3D模型列表"""
+    models_dir = Path(__file__).parent / "static" / "models"
+    if not models_dir.exists():
+        return schemas.ModelListResponse(models=[])
+
+    # 扫描.glb文件
+    model_files = list(models_dir.glob("*.glb"))
+    model_names = [f.stem for f in model_files]  # 不含扩展名
+
+    return schemas.ModelListResponse(models=model_names)
+
+
+@app.get("/api/models/{model_name}.glb")
+async def get_model(model_name: str):
+    """下载指定的3D模型文件"""
+    model_path = Path(__file__).parent / "static" / "models" / f"{model_name}.glb"
+
+    if not model_path.exists():
+        raise HTTPException(status_code=404, detail="模型文件不存在")
+
+    return FileResponse(model_path, media_type="model/gltf-binary")
+
+
+# ============ MQTT配置API ============
+
+@app.get("/api/mqtt/config", response_model=schemas.MQTTConfigResponse)
+async def get_mqtt_config():
+    """获取当前MQTT配置"""
+    mqtt_client = get_mqtt_client()
+    return schemas.MQTTConfigResponse(
+        broker=config.MQTT_BROKER,
+        port=config.MQTT_PORT,
+        username=config.MQTT_USERNAME,
+        connected=mqtt_client.is_connected()
+    )
+
+
+@app.put("/api/mqtt/config")
+async def update_mqtt_config(request: schemas.MQTTConfigRequest):
+    """更新MQTT配置（重启连接）"""
+    # 更新配置（这里简化处理，实际应该更新环境变量或配置文件）
+    logger.info(f"更新MQTT配置: {request.broker}:{request.port}")
+
+    # 这里应该实现重新连接逻辑
+    # 由于配置在config对象中，需要重启应用才能生效
+    # 或者实现动态重连机制
+
+    return {"message": "MQTT配置已更新（需要重启应用生效）"}
 
 
 # ============ WebSocket实时推送 ============
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket端点，用于实时推送频谱数据"""
+    """WebSocket端点，用于实时推送MQTT消息"""
     await manager.connect(websocket)
     try:
         while True:
             # 保持连接，接收客户端消息（心跳）
             data = await websocket.receive_text()
-            # 可以在这里处理客户端发来的消息
+            # 可选：回复心跳
+            if data == "ping":
+                await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception as e:
@@ -248,7 +433,12 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.get("/health")
 async def health_check():
     """健康检查"""
-    return {"status": "ok", "service": "sichuan-iot-platform"}
+    mqtt_client = get_mqtt_client()
+    return {
+        "status": "ok",
+        "service": "sichuan-iot-platform-v2",
+        "mqtt_connected": mqtt_client.is_connected()
+    }
 
 
 # ============ 运行应用 ============

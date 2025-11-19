@@ -206,9 +206,9 @@ export default {
 
           scene.add(model)
 
-          // 调整相机位置
-          const distance = maxDim * 2
-          camera.position.set(distance, distance * 0.5, distance)
+          // 调整相机位置 - 更靠近模型
+          const distance = maxDim * 1.2
+          camera.position.set(distance, distance * 0.4, distance * 0.8)
           camera.lookAt(0, 0, 0)
           controls.target.set(0, 0, 0)
         },

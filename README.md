@@ -16,7 +16,7 @@
 
 ## 🚀 快速开始
 
-### 第一步：启动 MQTT Broker
+### 第一步：启动 MQTT Broker(如果已有，则不需要)
 
 **macOS 用户**：
 ```bash

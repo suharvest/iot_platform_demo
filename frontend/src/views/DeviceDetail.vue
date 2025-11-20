@@ -165,6 +165,8 @@ export default {
     const chartContainer = ref(null)
     let chart = null
     let realtimeInterval = null
+    let measureTimeout = null
+    let isDisposed = false
     const availableModels = ref([])
 
     // 图表时间范围配置（单位：分钟）
@@ -217,7 +219,7 @@ export default {
 
     // 初始化图表
     const initChart = () => {
-      if (!chartContainer.value) return
+      if (!chartContainer.value || isDisposed) return
 
       chart = echarts.init(chartContainer.value, 'dark')
 
@@ -340,16 +342,22 @@ export default {
 
     // 更新图表
     const updateChart = () => {
-      if (measurements.value.length === 0) return
+      if (isDisposed || measurements.value.length === 0) return
 
-      // 如果图表还未初始化，或者容器不可见，则初始化图表
-      if (!chart || !chartContainer.value || chartContainer.value.offsetParent === null) {
-        // 等待DOM更新后初始化
+      // 容器还没渲染好时，等待DOM更新后再尝试一次
+      if (!chartContainer.value || chartContainer.value.offsetParent === null) {
         nextTick(() => {
-          initChart()
+          if (isDisposed) return
+          if (!chartContainer.value || chartContainer.value.offsetParent === null) return
           updateChart()
         })
         return
+      }
+
+      // 初始化图表（仅在需要时）
+      if (!chart) {
+        initChart()
+        if (!chart) return
       }
 
       // 将UTC时间戳转换为本地时间显示
@@ -415,7 +423,14 @@ export default {
           channel: selectedChannel.value
         })
         // 等待一下再刷新数据
-        setTimeout(loadMeasurements, 1000)
+        if (measureTimeout) {
+          clearTimeout(measureTimeout)
+        }
+        measureTimeout = setTimeout(() => {
+          if (!isDisposed) {
+            loadMeasurements()
+          }
+        }, 1000)
       } catch (error) {
         console.error('测量失败:', error)
       }
@@ -494,6 +509,7 @@ export default {
     })
 
     onUnmounted(() => {
+      isDisposed = true
       // 清理图表
       if (chart) {
         chart.dispose()
@@ -501,6 +517,10 @@ export default {
       // 清理定时器
       if (realtimeInterval) {
         clearInterval(realtimeInterval)
+      }
+      if (measureTimeout) {
+        clearTimeout(measureTimeout)
+        measureTimeout = null
       }
       // 清理事件监听器
       window.removeEventListener('resize', handleResize)

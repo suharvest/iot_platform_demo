@@ -55,9 +55,15 @@ docker run -d -p 1883:1883 --name mosquitto eclipse-mosquitto
 浏览器会自动打开 http://localhost:5173
 
 你也可以手动访问：
-- 🌐 **前端界面**：http://localhost:5173
-- 📡 **后端API**：http://localhost:8000
+- 🌐 **前端界面**：
+  - 本机：http://localhost:5173
+  - 局域网：http://你的IP:5173 （启动脚本会自动显示）
+- 📡 **后端API**：
+  - 本机：http://localhost:8000
+  - 局域网：http://你的IP:8000
 - 📚 **API文档**：http://localhost:8000/docs
+
+> **💡 提示**：服务已配置为监听 `0.0.0.0`，支持局域网内其他设备访问。启动后会自动显示局域网访问地址。
 
 ### （可选）运行设备模拟器
 

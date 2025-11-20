@@ -132,9 +132,17 @@ echo -e "${GREEN}================================${NC}"
 echo -e "${GREEN}🎉 所有服务已启动！${NC}"
 echo -e "${GREEN}================================${NC}"
 echo ""
+# 获取本机IP地址
+LOCAL_IP=$(ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
 echo "访问地址："
-echo -e "  前端: ${GREEN}http://localhost:5173${NC}"
-echo -e "  后端API: ${GREEN}http://localhost:8000${NC}"
+echo -e "  前端 (本机):   ${GREEN}http://localhost:5173${NC}"
+if [ ! -z "$LOCAL_IP" ]; then
+echo -e "  前端 (局域网): ${GREEN}http://${LOCAL_IP}:5173${NC}"
+fi
+echo -e "  后端API (本机):   ${GREEN}http://localhost:8000${NC}"
+if [ ! -z "$LOCAL_IP" ]; then
+echo -e "  后端API (局域网): ${GREEN}http://${LOCAL_IP}:8000${NC}"
+fi
 echo -e "  API文档: ${GREEN}http://localhost:8000/docs${NC}"
 echo ""
 echo "日志文件："

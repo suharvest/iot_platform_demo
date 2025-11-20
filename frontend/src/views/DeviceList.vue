@@ -170,13 +170,16 @@ export default {
     // 加载MQTT配置
     const loadMqttConfig = async () => {
       try {
+        console.log('[DeviceList] 开始加载MQTT配置...')
         const config = await mqttApi.getConfig()
+        console.log('[DeviceList] MQTT配置:', config)
         mqttConfig.value.broker = config.broker
         mqttConfig.value.port = config.port
         mqttConfig.value.username = config.username || ''
         mqttConnected.value = config.connected
+        console.log('[DeviceList] MQTT连接状态:', config.connected)
       } catch (error) {
-        console.error('加载MQTT配置失败:', error)
+        console.error('[DeviceList] 加载MQTT配置失败:', error)
       }
     }
 

@@ -421,29 +421,52 @@ export default {
       }
     }
 
-    // 实时读取
+    // 启动实时读取
+    const startRealtimeRead = () => {
+      // 先清除旧的定时器
+      if (realtimeInterval) {
+        clearInterval(realtimeInterval)
+        realtimeInterval = null
+      }
+      // 立即测量一次
+      measure()
+      // 启动定时器
+      realtimeInterval = setInterval(measure, 2000)
+    }
+
+    // 停止实时读取
+    const stopRealtimeRead = () => {
+      if (realtimeInterval) {
+        clearInterval(realtimeInterval)
+        realtimeInterval = null
+      }
+    }
+
+    // 实时读取开关
     watch(realtimeRead, (newVal) => {
       if (newVal) {
-        // 开始实时读取
-        measure()
-        realtimeInterval = setInterval(measure, 2000)
+        startRealtimeRead()
       } else {
-        // 停止实时读取
-        if (realtimeInterval) {
-          clearInterval(realtimeInterval)
-          realtimeInterval = null
-        }
+        stopRealtimeRead()
       }
     })
 
     // 监听tab切换
     watch(activeTab, () => {
       loadMeasurements()
+      // 如果实时读取开启,重启定时器
+      if (realtimeRead.value) {
+        startRealtimeRead()
+      }
     })
 
     // 监听通道切换
     watch(selectedChannel, () => {
       loadMeasurements()
+      // 如果实时读取开启,重启定时器
+      if (realtimeRead.value) {
+        startRealtimeRead()
+      }
     })
 
     // 位置更新回调

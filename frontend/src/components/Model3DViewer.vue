@@ -41,6 +41,7 @@ export default {
     const viewerContainer = ref(null)
     let scene, camera, renderer, controls, model
     let handleKeyDown, handleKeyUp, handleResize
+    let animationFrameId = null
 
     const close = () => {
       emit('close')
@@ -160,7 +161,7 @@ export default {
 
       // 动画循环
       const animate = () => {
-        requestAnimationFrame(animate)
+        animationFrameId = requestAnimationFrame(animate)
         controls.update()
         renderer.render(scene, camera)
       }
@@ -228,6 +229,12 @@ export default {
     })
 
     onUnmounted(() => {
+      // 停止动画循环
+      if (animationFrameId !== null) {
+        cancelAnimationFrame(animationFrameId)
+        animationFrameId = null
+      }
+
       // 清理事件监听器
       if (renderer && renderer.domElement) {
         if (handleKeyDown) {

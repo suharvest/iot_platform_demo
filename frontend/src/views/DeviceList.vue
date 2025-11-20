@@ -25,7 +25,7 @@
       <div class="mqtt-panel card">
         <div class="panel-header" @click="mqttPanelExpanded = !mqttPanelExpanded">
           <div class="panel-title-group">
-            <h3>MQTT配置</h3>
+            <h3>服务配置</h3>
             <span :class="['status-badge', mqttConnected ? 'connected' : 'disconnected']">
               {{ mqttConnected ? '已连接' : '未连接' }}
             </span>
@@ -126,7 +126,7 @@
 </template>
 
 <script>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { deviceApi, mqttApi } from '../utils/api'
 
@@ -143,6 +143,9 @@ export default {
       username: 'device_manager',
       password: ''
     })
+
+    // 定时器引用
+    let refreshTimer = null
 
     // 加载设备列表
     const loadDevices = async () => {
@@ -193,7 +196,15 @@ export default {
       loadMqttConfig()
 
       // 定时刷新设备列表
-      setInterval(loadDevices, 10000)
+      refreshTimer = setInterval(loadDevices, 10000)
+    })
+
+    // 清理定时器
+    onUnmounted(() => {
+      if (refreshTimer) {
+        clearInterval(refreshTimer)
+        refreshTimer = null
+      }
     })
 
     return {

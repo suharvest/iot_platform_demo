@@ -406,12 +406,12 @@ def run_default_simulator(broker: str = "127.0.0.1", port: int = 1883):
 
     # 3个示波器设备（支持完整功能）
     oscilloscope_configs = [
-        {
-            "sn": "OSC001",
-            "manufacturer": "ZLG",
-            "model": "ZDS21104",
-            "name": "Oscilloscope 1"
-        },
+        # {
+        #     "sn": "OSC001",
+        #     "manufacturer": "ZLG",
+        #     "model": "ZDS21104",
+        #     "name": "Oscilloscope 1"
+        # },
         {
             "sn": "OSC002",
             "manufacturer": "ZLG",
@@ -475,11 +475,11 @@ def run_default_simulator(broker: str = "127.0.0.1", port: int = 1883):
 
     # 5个位置追踪器
     location_configs = [
-        {"id": "desk1", "name": "桌子1"},
-        {"id": "desk2", "name": "桌子2"},
-        {"id": "desk3", "name": "桌子3"},
-        {"id": "shelf1", "name": "货架1"},
-        {"id": "workbench", "name": "工作台"},
+        {"id": "tracker1", "name": "桌子1"},
+        {"id": "tracker2", "name": "桌子2"},
+        {"id": "tracker3", "name": "桌子3"},
+        {"id": "tracker4", "name": "货架1"},
+        {"id": "tracker5", "name": "工作台"},
     ]
 
     location_sims = []

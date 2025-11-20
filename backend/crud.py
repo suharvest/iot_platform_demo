@@ -10,14 +10,46 @@ from backend import models, schemas
 
 # ============ 设备操作 ============
 
+# 设备离线超时时间(秒) - 设备每5秒推送一次心跳,15秒(3个周期)未收到则判定离线
+DEVICE_OFFLINE_TIMEOUT = 15
+
+
+def _update_device_realtime_status(device: models.Device) -> str:
+    """
+    根据 last_update 时间动态计算设备实时状态
+
+    Args:
+        device: 设备对象
+
+    Returns:
+        实时状态: "online" 或 "offline"
+    """
+    if device.last_update is None:
+        return "offline"
+
+    # 计算距离上次更新的时间差
+    time_since_update = (datetime.utcnow() - device.last_update).total_seconds()
+
+    # 如果超过15秒未更新,则判定为离线
+    return "online" if time_since_update <= DEVICE_OFFLINE_TIMEOUT else "offline"
+
+
 def get_device_by_sn(db: Session, sn: str) -> Optional[models.Device]:
     """根据序列号获取设备"""
-    return db.query(models.Device).filter(models.Device.sn == sn).first()
+    device = db.query(models.Device).filter(models.Device.sn == sn).first()
+    if device:
+        # 动态更新实时状态
+        device.status = _update_device_realtime_status(device)
+    return device
 
 
 def get_devices(db: Session, skip: int = 0, limit: int = 100) -> List[models.Device]:
     """获取设备列表"""
-    return db.query(models.Device).offset(skip).limit(limit).all()
+    devices = db.query(models.Device).offset(skip).limit(limit).all()
+    # 动态更新所有设备的实时状态
+    for device in devices:
+        device.status = _update_device_realtime_status(device)
+    return devices
 
 
 def get_devices_count(db: Session) -> int:

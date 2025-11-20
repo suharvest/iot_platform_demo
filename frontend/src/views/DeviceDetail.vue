@@ -456,24 +456,31 @@ export default {
       router.push('/devices')
     }
 
+    // resize 处理函数
+    const handleResize = () => {
+      if (chart) chart.resize()
+    }
+
     onMounted(() => {
       loadDevice()
       loadModels()
       loadMeasurements()
 
       // 窗口resize时调整图表
-      window.addEventListener('resize', () => {
-        if (chart) chart.resize()
-      })
+      window.addEventListener('resize', handleResize)
     })
 
     onUnmounted(() => {
+      // 清理图表
       if (chart) {
         chart.dispose()
       }
+      // 清理定时器
       if (realtimeInterval) {
         clearInterval(realtimeInterval)
       }
+      // 清理事件监听器
+      window.removeEventListener('resize', handleResize)
     })
 
     return {

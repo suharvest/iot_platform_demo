@@ -87,8 +87,21 @@ fi
 
 # 检查MQTT Broker
 echo -e "${YELLOW}🔌 检查MQTT Broker...${NC}"
-if ! nc -z localhost 1883 2>/dev/null; then
-    echo -e "${RED}⚠️  MQTT Broker未运行！${NC}"
+MQTT_RUNNING=false
+
+# 尝试多种方式检查端口 1883
+if command -v nc &> /dev/null; then
+    nc -z localhost 1883 2>/dev/null && MQTT_RUNNING=true
+elif command -v telnet &> /dev/null; then
+    timeout 1 telnet localhost 1883 2>/dev/null | grep -q "Connected" && MQTT_RUNNING=true
+elif command -v ss &> /dev/null; then
+    ss -ltn | grep -q ":1883" && MQTT_RUNNING=true
+elif command -v netstat &> /dev/null; then
+    netstat -an 2>/dev/null | grep -q "LISTEN.*:1883" && MQTT_RUNNING=true
+fi
+
+if [ "$MQTT_RUNNING" = false ]; then
+    echo -e "${RED}⚠️  MQTT Broker未运行（或无法检测）！${NC}"
     echo -e "${YELLOW}启动方法:${NC}"
     echo "  brew services start mosquitto  (macOS)"
     echo "  sudo systemctl start mosquitto  (Linux)"
@@ -99,6 +112,8 @@ if ! nc -z localhost 1883 2>/dev/null; then
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         exit 1
     fi
+else
+    echo -e "${GREEN}✓ MQTT Broker 正在运行${NC}"
 fi
 
 echo -e "${GREEN}================================${NC}"

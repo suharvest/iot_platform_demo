@@ -139,11 +139,11 @@ echo -e "  前端 (本机):   ${GREEN}http://localhost:5173${NC}"
 if [ ! -z "$LOCAL_IP" ]; then
 echo -e "  前端 (局域网): ${GREEN}http://${LOCAL_IP}:5173${NC}"
 fi
-echo -e "  后端API (本机):   ${GREEN}http://localhost:8000${NC}"
+echo -e "  后端API (本机):   ${GREEN}http://localhost:9099${NC}"
 if [ ! -z "$LOCAL_IP" ]; then
-echo -e "  后端API (局域网): ${GREEN}http://${LOCAL_IP}:8000${NC}"
+echo -e "  后端API (局域网): ${GREEN}http://${LOCAL_IP}:9099${NC}"
 fi
-echo -e "  API文档: ${GREEN}http://localhost:8000/docs${NC}"
+echo -e "  API文档: ${GREEN}http://localhost:9099/docs${NC}"
 echo ""
 echo "日志文件："
 echo "  后端日志: logs/backend.log"

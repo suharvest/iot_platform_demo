@@ -7,6 +7,7 @@ import logging
 import os
 from typing import List, Optional
 from pathlib import Path
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,11 +22,50 @@ from backend.config import config
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# 全局变量
+main_event_loop = None
+
+# Lifespan 事件处理器
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    import asyncio
+    global main_event_loop
+
+    # 启动事件
+    logger.info("🚀 启动四川物联网平台（设备管理系统）...")
+
+    # 保存主事件循环引用
+    main_event_loop = asyncio.get_event_loop()
+
+    # 初始化数据库
+    init_db()
+    logger.info("✓ 数据库已初始化")
+
+    # 启动MQTT客户端
+    try:
+        init_mqtt_client(on_message_callback=on_mqtt_message)
+        logger.info("✓ MQTT客户端已启动")
+    except Exception as e:
+        logger.error(f"✗ MQTT客户端启动失败: {e}")
+
+    yield  # 应用运行期间
+
+    # 关闭事件
+    logger.info("关闭应用...")
+    try:
+        mqtt_client = get_mqtt_client()
+        mqtt_client.stop()
+        logger.info("✓ MQTT客户端已停止")
+    except Exception as e:
+        logger.error(f"✗ MQTT客户端停止失败: {e}")
+
 # 创建FastAPI应用
 app = FastAPI(
     title="四川物联网平台 - 设备管理系统",
     description="基于MQTT协议的示波器设备管理系统",
     version="2.0.0",
+    lifespan=lifespan
 )
 
 # 挂载静态文件（3D模型）
@@ -91,43 +131,6 @@ def on_mqtt_message(topic: str, payload: dict):
             )
     except Exception as e:
         logger.error(f"推送MQTT消息失败: {e}")
-
-
-# ============ 启动和关闭事件 ============
-
-@app.on_event("startup")
-async def startup_event():
-    """应用启动事件"""
-    import asyncio
-    global main_event_loop
-
-    logger.info("🚀 启动四川物联网平台（设备管理系统）...")
-
-    # 保存主事件循环引用
-    main_event_loop = asyncio.get_event_loop()
-
-    # 初始化数据库
-    init_db()
-    logger.info("✓ 数据库已初始化")
-
-    # 启动MQTT客户端
-    try:
-        init_mqtt_client(on_message_callback=on_mqtt_message)
-        logger.info("✓ MQTT客户端已启动")
-    except Exception as e:
-        logger.error(f"✗ MQTT客户端启动失败: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭事件"""
-    logger.info("关闭应用...")
-    try:
-        mqtt_client = get_mqtt_client()
-        mqtt_client.stop()
-        logger.info("✓ MQTT客户端已停止")
-    except Exception as e:
-        logger.error(f"关闭MQTT客户端失败: {e}")
 
 
 # ============ 前端页面 ============

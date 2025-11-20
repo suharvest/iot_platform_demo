@@ -59,9 +59,9 @@ docker run -d -p 1883:1883 --name mosquitto eclipse-mosquitto
   - 本机：http://localhost:5173
   - 局域网：http://你的IP:5173 （启动脚本会自动显示）
 - 📡 **后端API**：
-  - 本机：http://localhost:8000
-  - 局域网：http://你的IP:8000
-- 📚 **API文档**：http://localhost:8000/docs
+  - 本机：http://localhost:9099
+  - 局域网：http://你的IP:9099
+- 📚 **API文档**：http://localhost:9099/docs
 
 > **💡 提示**：服务已配置为监听 `0.0.0.0`，支持局域网内其他设备访问。启动后会自动显示局域网访问地址。
 
@@ -228,8 +228,8 @@ tail -f frontend.log  # 查看前端日志
 
 访问地址：
 - 前端：http://localhost:5173
-- 后端API：http://localhost:8000
-- API文档：http://localhost:8000/docs
+- 后端API：http://localhost:9099
+- API文档：http://localhost:9099/docs
 
 ---
 
@@ -264,9 +264,9 @@ cp .env.example .env
 uv run python -m backend.main
 ```
 
-后端将运行在 http://localhost:8000
+后端将运行在 http://localhost:9099
 
-**API文档**：http://localhost:8000/docs
+**API文档**：http://localhost:9099/docs
 
 #### 3. 前端启动
 
@@ -481,7 +481,7 @@ uv run python device_simulator.py
 
 ### 前端无法连接后端
 
-1. 确认后端已启动（http://localhost:8000/health）
+1. 确认后端已启动（http://localhost:9099/health）
 2. 检查Vite代理配置（vite.config.js）
 3. 查看浏览器控制台Network面板
 
@@ -557,7 +557,7 @@ lsof -ti:5173 | xargs kill  # 前端端口
 **检查服务是否运行**：
 ```bash
 # 检查后端
-curl http://localhost:8000/health
+curl http://localhost:9099/health
 
 # 检查进程
 ps aux | grep "backend.main"

@@ -24,7 +24,7 @@ class Config:
 
     # API服务配置
     API_HOST = os.getenv("API_HOST", "0.0.0.0")
-    API_PORT = int(os.getenv("API_PORT", "8000"))
+    API_PORT = int(os.getenv("API_PORT", "9099"))
 
     # 启动配置
     START_LOCAL_MQTT = os.getenv("START_LOCAL_MQTT", "false").lower() == "true"
